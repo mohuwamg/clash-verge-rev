@@ -9,6 +9,15 @@
 A Clash Meta GUI based on <a href="https://github.com/tauri-apps/tauri">Tauri</a>.
 </h3>
 
+> **声明 / Disclaimer**
+>
+> 本仓库是上游项目 [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev) 的同步镜像：每天自动合并上游 `dev` / `main` 分支代码，并在上游发布新版本 tag 时由 GitHub Actions 自动构建各平台安装包。除下文「自动切换通道」一节所述的改动外，本项目不包含其他功能改动，也不用于任何商业用途；项目名、图标、界面与内核的版权均归原作者所有，许可证沿用上游 [GPL-3.0](./LICENSE)。
+>
+> This repository automatically syncs code from [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev) once a day and builds installers from upstream release tags. It is not an official release channel.
+>
+> **如上游作者或权利人认为本仓库侵犯了您的权利，请在本仓库 [Issues](https://github.com/mohuwamg/clash-verge-rev/issues) 留言告知，我们会第一时间删除并下架本仓库。**
+> **If you are the upstream author or rights holder and consider this repository infringing, please open an issue and we will take it down immediately.**
+
 <p align="center">
   Languages:
   <a href="./README.md">简体中文</a> ·
@@ -31,6 +40,8 @@ A Clash Meta GUI based on <a href="https://github.com/tauri-apps/tauri">Tauri</a
 请到发布页面下载对应的安装包：[Release page](https://github.com/clash-verge-rev/clash-verge-rev/releases)<br>
 Go to the [Release page](https://github.com/clash-verge-rev/clash-verge-rev/releases) to download the corresponding installation package<br>
 Supports Windows (x64/x86), Linux (x64/arm64) and macOS 11+ (intel/apple).
+
+> 日常使用请优先选择上游官方安装包。本仓库 [Releases](https://github.com/mohuwamg/clash-verge-rev/releases) 里的安装包由 GitHub Actions 在同步上游 tag 后自动构建，仅供需要「自动切换通道」改动的用户使用，未经 Apple 公证与上游签名，可能出现系统拦截或无法自动更新。
 
 #### 我应当怎样选择发行版
 
@@ -85,6 +96,18 @@ Supports Windows (x64/x86), Linux (x64/arm64) and macOS 11+ (intel/apple).
 - 系统代理和守卫、`TUN(虚拟网卡)` 模式。
 - 可视化节点和规则编辑
 - WebDav 配置备份和同步
+- **自动切换通道**（本仓库在上游之外新增的功能，详见下两节）
+
+### 自动切换通道
+
+上游的自动换节点依赖 `urltest` 延迟测速（谁快用谁）；本仓库新增的两类切换是按**目标网站是否真的可用**来判断，都在代理页配置、只影响本机运行实例：
+
+- **多入口自动回退**：`链式代理 → 多入口自动切换` 可选择多个入口候选和一个出口，链路为「电脑 → 一个入口 → 出口 → 网站」。入口按添加顺序自动回退，每 20 秒用普通连通性地址检查一次；入口只要能上普通网络即可，不要求入口本身能访问 OpenAI。
+- **同 IP 主备自动切换**：只在名称中 IPv4 地址相同、以「主线」或「备用」结尾的相反线路之间切换。当前线路故障时直接检查同 IP 配对线路的目标可用性；不会跨 IP 随机选择、不会因为延迟更低就迁移、也不会因为检测失败去刷新订阅。无法识别当前 IP 或主备标记时不自动改选其他 IP，用户仍可手动选择。
+- **检测节奏**：正常情况下每 60 秒检测一次；当前线路与同 IP 配对线路都不可用时，本轮结束后等待 30 秒再测，恢复后回到 60 秒。需要人机验证时保留当前线路按正常周期复查。节点延迟展示仍每分钟刷新，延迟测速只用于展示，不作为候选筛选条件。
+- **失败不静默**：配置绑定保存时的订阅，重启和订阅刷新后重新应用；出现缺失节点或原有链路冲突会报错，不会静默改走直连。
+- **OpenAI 接口判定例外**：目标网站设为 `https://api.openai.com/v1/models` 时，返回结构正确的 `401` 视为「网络已连通（接口需要认证）」，不会因此切换节点；普通网页的 `401`、拒绝访问、限流和服务器错误不放行。
+- **本机通知接口**：同机程序可调用 `127.0.0.1:17897` 主动触发一次检测，不需要查询端口或令牌，详见下一节。
 
 ### 自动故障切换本机通知接口
 
@@ -165,6 +188,7 @@ Issue and PR welcome!
 
 Clash Verge rev was based on or inspired by these projects and so on:
 
+- [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev): 本仓库每日同步的上游原始项目，界面、内核与主体功能均归其作者所有。
 - [zzzgydi/clash-verge](https://github.com/zzzgydi/clash-verge): A Clash GUI based on tauri. Supports Windows, macOS and Linux.
 - [tauri-apps/tauri](https://github.com/tauri-apps/tauri): Build smaller, faster, and more secure desktop applications with a web frontend.
 - [Dreamacro/clash](https://github.com/Dreamacro/clash): A rule-based tunnel in Go.
