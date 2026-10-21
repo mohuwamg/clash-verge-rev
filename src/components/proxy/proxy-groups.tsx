@@ -186,7 +186,10 @@ function ChainProxyGroups(props: {
     const groups = proxyView?.groups
     if (!groups) return []
     return groups.filter(
-      (group) => group.type === 'Selector' || group.type === 'URLTest',
+      (group) =>
+        group.type === 'Selector' ||
+        group.type === 'URLTest' ||
+        group.type === 'Fallback',
     )
   }, [proxyView?.groups])
 

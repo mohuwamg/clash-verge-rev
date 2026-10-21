@@ -851,6 +851,8 @@ interface IProxyConfig
 }
 
 interface IVergeConfig {
+  entry_pool?: import('./entry-pool').EntryPoolConfig
+  auto_failover?: import('./auto-failover').AutoFailoverConfig
   app_log_level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | string
   app_log_max_size?: number // KB
   app_log_max_count?: number

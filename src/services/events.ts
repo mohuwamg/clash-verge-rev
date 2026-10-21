@@ -4,6 +4,7 @@ import type { RunState } from './cmds'
 
 /** Centralizes frontend event names and payload types for the unchecked Rust IPC seam. */
 interface VergeEvents {
+  'verge://auto-failover': import('@/types/auto-failover').AutoFailoverStatus
   'verge://refresh-clash-config': string
   'verge://refresh-verge-config': string
   'verge://refresh-profiles': string

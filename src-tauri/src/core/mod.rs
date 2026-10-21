@@ -1,3 +1,4 @@
+pub mod auto_failover;
 pub mod autostart;
 pub mod backup;
 pub mod handle;

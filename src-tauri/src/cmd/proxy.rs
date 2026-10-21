@@ -21,7 +21,14 @@ use std::{
 pub async fn record_selected_node(group_name: String, node: String) -> CmdResult<()> {
     crate::config::profiles::record_selected_node(&group_name, &node)
         .await
-        .stringify_err()
+        .stringify_err()?;
+    if matches!(
+        group_name.as_str(),
+        "GLOBAL" | crate::core::auto_failover::policy::GROUP
+    ) {
+        crate::core::auto_failover::request_check();
+    }
+    Ok(())
 }
 
 #[tauri::command]

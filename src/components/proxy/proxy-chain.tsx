@@ -22,6 +22,8 @@ import {
   IconButton,
   Paper,
   Typography,
+  ToggleButton,
+  ToggleButtonGroup,
   keyframes,
   useTheme,
 } from '@mui/material'
@@ -43,6 +45,7 @@ import {
 import { TooltipIcon } from '@/components/base'
 import { useRuntimeConfig } from '@/hooks/use-clash'
 import { useRecordSelection } from '@/hooks/use-record-selection'
+import { useVerge } from '@/hooks/use-verge'
 import { useAppRefreshers, useProxiesData } from '@/providers/app-data-context'
 import { updateProxyChainConfigInRuntime } from '@/services/cmds'
 import {
@@ -51,6 +54,7 @@ import {
 } from '@/types/proxy-view'
 import { debugLog } from '@/utils/debug'
 
+import { EntryPoolPanel } from './entry-pool-panel'
 import { rebindProxyChainItems, type ProxyChainItem } from './proxy-chain-model'
 
 const chainPointerSensor = PointerSensor.configure({
@@ -336,8 +340,13 @@ export const ProxyChain = ({
   const chainWarning = t('proxies.page.chain.warning')
   const { proxyView } = useProxiesData()
   const { refreshProxy } = useAppRefreshers()
-  const { data: runtimeConfig } = useRuntimeConfig(true)
+  const { data: runtimeConfig, refetch: refreshRuntime } =
+    useRuntimeConfig(true)
   const [isConnecting, setIsConnecting] = useState(false)
+  const { verge } = useVerge()
+  const [editorMode, setEditorMode] = useState<'pool' | 'serial'>(() =>
+    localStorage.getItem('proxy-chain-exit-node') ? 'serial' : 'pool',
+  )
   const recordSelection = useRecordSelection()
   const markUnsavedChanges = useCallback(() => {
     onMarkUnsavedChanges?.()
@@ -375,9 +384,23 @@ export const ProxyChain = ({
     }
 
     const lastNode = currentProxyChain[currentProxyChain.length - 1]
-    if (localStorage.getItem('proxy-chain-exit-node') === lastNode.name) {
-      return true
-    }
+    const runtimeProxies = (
+      runtimeConfig as
+        | { proxies?: Array<{ name: string; 'dialer-proxy'?: string }> }
+        | undefined
+    )?.proxies
+    if (
+      !currentProxyChain
+        .slice(1)
+        .every((node, index) =>
+          runtimeProxies?.some(
+            (p) =>
+              p.name === node.name &&
+              p['dialer-proxy'] === currentProxyChain[index].name,
+          ),
+        )
+    )
+      return false
     if (currentProxyChain.length < 2) return false
 
     if (mode === 'global') {
@@ -393,7 +416,7 @@ export const ProxyChain = ({
     )
 
     return proxyChainGroup?.now === lastNode.name
-  }, [proxyView, currentProxyChain, mode, selectedGroup])
+  }, [proxyView, currentProxyChain, mode, selectedGroup, runtimeConfig])
 
   // 监听链的变化，但排除从配置加载的情况
   const chainLengthRef = useRef(currentProxyChain.length)
@@ -472,6 +495,7 @@ export const ProxyChain = ({
         localStorage.removeItem('proxy-chain-items')
 
         await closeAllConnections()
+        await refreshRuntime()
         await refreshProxy()
 
         onUpdateChain([])
@@ -524,6 +548,7 @@ export const ProxyChain = ({
       localStorage.setItem('proxy-chain-exit-node', lastNode.name)
 
       // 刷新代理信息以更新连接状态
+      await refreshRuntime()
       refreshProxy()
       debugLog('Successfully connected to proxy chain')
     } catch (error) {
@@ -537,6 +562,7 @@ export const ProxyChain = ({
     isConnected,
     t,
     refreshProxy,
+    refreshRuntime,
     mode,
     proxyView,
     selectedGroup,
@@ -561,6 +587,32 @@ export const ProxyChain = ({
     }
   }, [chainConfigData, onUpdateChain])
 
+  const modeSelector = (
+    <ToggleButtonGroup
+      exclusive
+      value={verge?.entry_pool?.enabled ? 'pool' : editorMode}
+      size="small"
+      onChange={(_, value: 'pool' | 'serial' | null) => {
+        if (value) setEditorMode(value)
+      }}
+    >
+      <ToggleButton value="pool">
+        {t('proxies.page.chain.pool.title')}
+      </ToggleButton>
+      <ToggleButton value="serial" disabled={verge?.entry_pool?.enabled}>
+        {t('proxies.page.chain.pool.serial')}
+      </ToggleButton>
+    </ToggleButtonGroup>
+  )
+  if (editorMode === 'pool' || verge?.entry_pool?.enabled) {
+    return (
+      <Paper sx={{ height: '100%', p: 2, overflow: 'auto' }}>
+        {modeSelector}
+        <EntryPoolPanel mode={mode} selectedGroup={selectedGroup} />
+      </Paper>
+    )
+  }
+
   return (
     <Paper
       elevation={1}
@@ -571,6 +623,7 @@ export const ProxyChain = ({
         flexDirection: 'column',
       }}
     >
+      {modeSelector}
       <Box
         sx={{
           display: 'flex',
@@ -592,12 +645,17 @@ export const ProxyChain = ({
           {currentProxyChain.length > 0 && (
             <IconButton
               size="small"
-              onClick={() => {
-                updateProxyChainConfigInRuntime(null)
-                localStorage.removeItem('proxy-chain-group')
-                localStorage.removeItem('proxy-chain-exit-node')
-                localStorage.removeItem('proxy-chain-items')
-                onUpdateChain([])
+              onClick={async () => {
+                try {
+                  await updateProxyChainConfigInRuntime(null)
+                  await refreshRuntime()
+                  localStorage.removeItem('proxy-chain-group')
+                  localStorage.removeItem('proxy-chain-exit-node')
+                  localStorage.removeItem('proxy-chain-items')
+                  onUpdateChain([])
+                } catch (error) {
+                  alert(String(error))
+                }
               }}
               sx={{
                 color: theme.palette.error.main,

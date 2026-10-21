@@ -34,6 +34,14 @@ async fn record_switched_node(group_name: &str, proxy_name: &str) {
 }
 
 pub async fn switch_proxy_node(group_name: &str, proxy_name: &str) {
+    match crate::core::auto_failover::manual_select(group_name, proxy_name).await {
+        Ok(true) => return,
+        Err(error) => {
+            logging!(error, Type::Tray, "Manual failover selection failed: {error:#}");
+            return;
+        }
+        Ok(false) => {}
+    }
     match handle::Handle::mihomo()
         .select_node_for_group(group_name, proxy_name)
         .await
@@ -195,6 +203,12 @@ async fn perform_profile_update(
 }
 
 pub async fn update_profile(uid: &String, option: Option<&PrfOption>, is_mannual_trigger: bool) -> Result<()> {
+    let _update = crate::core::auto_failover::SUBSCRIPTION_UPDATE.lock().await;
+    let _pause = crate::core::auto_failover::pause_for_subscription_update(uid).await;
+    update_profile_inner(uid, option, is_mannual_trigger).await
+}
+
+async fn update_profile_inner(uid: &String, option: Option<&PrfOption>, is_mannual_trigger: bool) -> Result<()> {
     logging!(info, Type::Config, "[订阅更新] 开始更新订阅 {}", uid);
     let url_opt = should_update_profile(uid, is_mannual_trigger).await?;
 

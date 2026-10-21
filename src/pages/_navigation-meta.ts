@@ -1,4 +1,5 @@
 export const navigationItems = {
+  codex: { label: 'layout.components.navigation.tabs.codex', path: '/codex' },
   home: { label: 'layout.components.navigation.tabs.home', path: '/' },
   proxies: {
     label: 'layout.components.navigation.tabs.proxies',

@@ -62,6 +62,14 @@ impl Handle {
         Self::send_event(FrontendEvent::RunStateChanged { state });
     }
 
+    /// Status updates use the main-thread notification queue, like other UI events.
+    pub fn notify_auto_failover(state: &super::auto_failover::FailoverStatus) {
+        let Ok(state) = serde_json::to_value(state) else {
+            return;
+        };
+        Self::send_event(FrontendEvent::AutoFailoverChanged { state });
+    }
+
     pub fn notify_profile_changed(profile_id: &String) {
         Self::send_event(FrontendEvent::ProfileChanged {
             current_profile_id: profile_id,

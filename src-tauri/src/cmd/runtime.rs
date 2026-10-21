@@ -1,7 +1,6 @@
 use super::CmdResult;
 use crate::{cmd::StringifyErr as _, config::Config, core::CoreManager, utils::yaml_emitter};
 use anyhow::{Context as _, anyhow};
-use clash_verge_logging::{Type, logging};
 use serde_yaml_ng::Mapping;
 use smartstring::alias::String;
 use std::collections::{HashMap, HashSet};
@@ -51,6 +50,7 @@ pub async fn get_runtime_proxy_chain_config(proxy_chain_exit_node: String) -> Cm
     if let Some(serde_yaml_ng::Value::Sequence(proxies)) = config.get("proxies") {
         let mut proxy_name = Some(Some(proxy_chain_exit_node.as_str()));
         let mut proxies_chain = Vec::new();
+        let mut visited = HashSet::new();
 
         while let Some(proxy) = proxies.iter().find(|proxy| {
             if let serde_yaml_ng::Value::Mapping(proxy_map) = proxy {
@@ -59,6 +59,9 @@ pub async fn get_runtime_proxy_chain_config(proxy_chain_exit_node: String) -> Cm
                 false
             }
         }) {
+            if !visited.insert(proxy_name) {
+                return Err("代理链存在循环".into());
+            }
             proxies_chain.push(proxy.to_owned());
             proxy_name = proxy.get("dialer-proxy").map(|x| x.as_str());
         }
@@ -88,19 +91,28 @@ pub async fn get_runtime_proxy_chain_config(proxy_chain_exit_node: String) -> Cm
 
 #[tauri::command]
 pub async fn update_proxy_chain_config_in_runtime(proxy_chain_config: Option<serde_yaml_ng::Value>) -> CmdResult<()> {
-    match CoreManager::global()
+    let pool = Config::verge()
+        .await
+        .latest_arc()
+        .entry_pool
+        .clone()
+        .unwrap_or_default();
+    if pool.enabled {
+        if proxy_chain_config.is_some() {
+            return Err("请先停用多入口模式，再连接串联代理".into());
+        }
+        let mut disabled = pool;
+        disabled.enabled = false;
+        return crate::core::auto_failover::configure_entry_pool(disabled)
+            .await
+            .stringify_err();
+    }
+    let outcome = CoreManager::global()
         .update_runtime_config(|d| d.update_proxy_chain_config(proxy_chain_config))
         .await
-    {
-        Ok(outcome) if outcome.is_valid() => {}
-        Ok(outcome) => logging!(
-            warn,
-            Type::Core,
-            "Failed to apply runtime proxy chain config: {}",
-            outcome
-        ),
-        Err(err) => logging!(error, Type::Core, "Failed to apply runtime proxy chain config: {}", err),
+        .stringify_err()?;
+    if !outcome.is_valid() {
+        return Err(format!("Failed to apply proxy chain: {outcome}").into());
     }
-
     Ok(())
 }

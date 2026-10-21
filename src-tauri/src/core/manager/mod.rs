@@ -169,6 +169,7 @@ impl CoreManager {
     /// Core readiness is invalidated here rather than inside Run State because readiness
     /// belongs to the process this manager supervises.
     pub fn core_stopped(&self) {
+        crate::core::auto_failover::invalidate();
         self.invalidate_core_readiness();
         self.run_state.core_stopped();
     }
@@ -199,7 +200,10 @@ impl CoreManager {
                 .core_readiness_state
                 .compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire)
             {
-                Ok(_) => return next,
+                Ok(_) => {
+                    crate::core::auto_failover::wake();
+                    return next;
+                }
                 Err(changed) => current = changed,
             }
         }

@@ -21,6 +21,8 @@ use warp::Filter as _;
 const INSTANCE_TOKEN_HEADER: &str = "x-instance-token";
 const INSTANCE_RECORD_FILE: &str = "singleton-instance.json";
 const INSTANCE_LOCK_FILE: &str = "singleton-instance.lock";
+const FAILOVER_NOTIFY_PORT: u16 = 17897;
+const FAILOVER_NOTIFY_HEADER: &str = "x-clash-failover-notify";
 
 #[derive(Deserialize, Debug)]
 struct QueryParam {
@@ -34,6 +36,7 @@ struct InstanceRecord {
 }
 
 static SHUTDOWN_SENDER: OnceCell<Mutex<Option<oneshot::Sender<()>>>> = OnceCell::new();
+static FAILOVER_SHUTDOWN_SENDER: OnceCell<Mutex<Option<oneshot::Sender<()>>>> = OnceCell::new();
 static EMBEDDED_PORT: OnceCell<u16> = OnceCell::new();
 static INSTANCE_LOCK: OnceCell<std::fs::File> = OnceCell::new();
 const PAC_INITIAL_AVAILABLE: bool = false;
@@ -65,6 +68,19 @@ pub async fn check_singleton() -> Result<SingletonDisposition> {
         bail!("another app instance is starting");
     }
 
+    // Reserve the fixed notification address first so the internal server cannot
+    // accidentally claim it through a retained port hint or an ephemeral bind.
+    let failover_listener = match tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, FAILOVER_NOTIFY_PORT)).await {
+        Ok(listener) => Some(listener),
+        Err(error) => {
+            logging!(
+                error,
+                Type::Window,
+                "Cannot start local auto-failover notification endpoint on 127.0.0.1:{FAILOVER_NOTIFY_PORT}: {error}"
+            );
+            None
+        }
+    };
     let preferred = read_instance_record(&record_path).ok().map(|record| record.port);
     let listener = bind_primary_listener(preferred)
         .await
@@ -83,6 +99,9 @@ pub async fn check_singleton() -> Result<SingletonDisposition> {
         .map_err(|_| anyhow::anyhow!("singleton lock is already initialized"))?;
     let _ = EMBEDDED_PORT.set(port);
     start_embedded_server(listener, record.token);
+    if let Some(listener) = failover_listener {
+        start_failover_notify_server(listener);
+    }
     Ok(SingletonDisposition::Primary)
 }
 
@@ -144,6 +163,57 @@ fn instance_auth(token: String) -> impl warp::Filter<Extract = (), Error = warp:
         .untuple_one()
 }
 
+fn auto_failover_check_route<F>(
+    token: String,
+    commands_ready: &'static AtomicBool,
+    trigger: F,
+) -> impl warp::Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
+where
+    F: Fn() + Clone + Send + Sync + 'static,
+{
+    instance_auth(token)
+        .and(warp::path!("commands" / "auto-failover" / "check"))
+        .and(warp::post())
+        .and_then(move || {
+            let trigger = trigger.clone();
+            async move {
+                if !commands_ready.load(Ordering::Acquire) {
+                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                        "starting",
+                        warp::http::StatusCode::SERVICE_UNAVAILABLE,
+                    ));
+                }
+                trigger();
+                Ok(warp::reply::with_status(
+                    "accepted",
+                    warp::http::StatusCode::ACCEPTED,
+                ))
+            }
+        })
+}
+
+fn fixed_failover_check_route<F>(
+    commands_ready: &'static AtomicBool,
+    trigger: F,
+) -> impl warp::Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
+where
+    F: Fn() + Clone + Send + Sync + 'static,
+{
+    warp::path!("commands" / "auto-failover" / "check")
+        .and(warp::post())
+        .and(warp::header::optional::<String>(FAILOVER_NOTIFY_HEADER))
+        .map(move |provided: Option<String>| {
+            if provided.as_deref() != Some("1") {
+                return warp::reply::with_status("forbidden", warp::http::StatusCode::FORBIDDEN);
+            }
+            if !commands_ready.load(Ordering::Acquire) {
+                return warp::reply::with_status("starting", warp::http::StatusCode::SERVICE_UNAVAILABLE);
+            }
+            trigger();
+            warp::reply::with_status("accepted", warp::http::StatusCode::ACCEPTED)
+        })
+}
+
 #[cfg(feature = "verge-dev")]
 fn dev_quit_route<F>(
     token: String,
@@ -191,10 +261,7 @@ fn start_embedded_server(listener: tokio::net::TcpListener, token: String) {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let _ = SHUTDOWN_SENDER.set(Mutex::new(Some(shutdown_tx)));
 
-    #[cfg(feature = "verge-dev")]
     let auth = instance_auth(token.clone());
-    #[cfg(not(feature = "verge-dev"))]
-    let auth = instance_auth(token);
 
     let visible = warp::path!("commands" / "visible").and_then(|| async {
         if !COMMANDS_READY.load(Ordering::Acquire) {
@@ -256,6 +323,9 @@ fn start_embedded_server(listener: tokio::net::TcpListener, token: String) {
         });
 
     let commands = auth.clone().and(visible).or(auth.and(scheme)).or(pac);
+    let commands = commands.or(auto_failover_check_route(token.clone(), &COMMANDS_READY, || {
+        crate::core::auto_failover::request_check();
+    }));
     #[cfg(feature = "verge-dev")]
     let commands = commands.or(dev_quit_route(token, &COMMANDS_READY, &DEV_QUIT_REQUESTED, || {
         AsyncHandler::spawn(|| async {
@@ -270,6 +340,22 @@ fn start_embedded_server(listener: tokio::net::TcpListener, token: String) {
             })
             .run()
             .await;
+    });
+}
+
+fn start_failover_notify_server(listener: tokio::net::TcpListener) {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let _ = FAILOVER_SHUTDOWN_SENDER.set(Mutex::new(Some(shutdown_tx)));
+    AsyncHandler::spawn(move || async move {
+        warp::serve(fixed_failover_check_route(&COMMANDS_READY, || {
+            crate::core::auto_failover::request_check();
+        }))
+        .incoming(listener)
+        .graceful(async {
+            shutdown_rx.await.ok();
+        })
+        .run()
+        .await;
     });
 }
 
@@ -301,6 +387,11 @@ pub fn embedded_server_port() -> Result<u16> {
 pub fn shutdown_embedded_server() {
     logging!(info, Type::Window, "shutting down embedded server");
     if let Some(sender) = SHUTDOWN_SENDER.get()
+        && let Some(sender) = sender.lock().take()
+    {
+        sender.send(()).ok();
+    }
+    if let Some(sender) = FAILOVER_SHUTDOWN_SENDER.get()
         && let Some(sender) = sender.lock().take()
     {
         sender.send(()).ok();
@@ -433,16 +524,16 @@ fn write_instance_record(path: &Path, record: &InstanceRecord) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        InstanceRecord, PAC_INITIAL_AVAILABLE, bind_primary_listener, read_instance_record, write_instance_record,
+        FAILOVER_NOTIFY_HEADER, INSTANCE_TOKEN_HEADER, InstanceRecord, PAC_INITIAL_AVAILABLE,
+        auto_failover_check_route, bind_primary_listener, fixed_failover_check_route, read_instance_record,
+        write_instance_record,
     };
     #[cfg(unix)]
     use super::{open_instance_lock, try_lock_instance};
 
     #[cfg(feature = "verge-dev")]
-    use super::{INSTANCE_TOKEN_HEADER, dev_quit_route, release_dev_quit_latch};
-    #[cfg(feature = "verge-dev")]
+    use super::{dev_quit_route, release_dev_quit_latch};
     use std::sync::atomic::Ordering;
-    #[cfg(feature = "verge-dev")]
     use std::sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize},
@@ -454,6 +545,70 @@ mod tests {
         // legitimately moves the live flag. That the derivation itself can never disagree with
         // the Running Mode is covered in `core::runstate` against a fake environment.
         const { assert!(!PAC_INITIAL_AVAILABLE) }
+    }
+
+    #[tokio::test]
+    async fn external_failover_check_requires_auth_and_readiness() {
+        static READY: AtomicBool = AtomicBool::new(false);
+        READY.store(false, Ordering::Release);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let route = auto_failover_check_route("secret".into(), &READY, move || {
+            observed.fetch_add(1, Ordering::AcqRel);
+        });
+
+        for provided in [None, Some("wrong")] {
+            let mut request = warp::test::request()
+                .method("POST")
+                .path("/commands/auto-failover/check");
+            if let Some(token) = provided {
+                request = request.header(INSTANCE_TOKEN_HEADER, token);
+            }
+            assert_eq!(request.reply(&route).await.status(), warp::http::StatusCode::NOT_FOUND);
+        }
+
+        let request = || {
+            warp::test::request()
+                .method("POST")
+                .path("/commands/auto-failover/check")
+                .header(INSTANCE_TOKEN_HEADER, "secret")
+        };
+        assert_eq!(request().reply(&route).await.status(), warp::http::StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(calls.load(Ordering::Acquire), 0);
+        READY.store(true, Ordering::Release);
+        assert_eq!(request().method("GET").reply(&route).await.status(), warp::http::StatusCode::METHOD_NOT_ALLOWED);
+        assert_eq!(request().reply(&route).await.status(), warp::http::StatusCode::ACCEPTED);
+        assert_eq!(calls.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn fixed_failover_check_rejects_plain_browser_posts_and_triggers_when_ready() {
+        static READY: AtomicBool = AtomicBool::new(false);
+        READY.store(false, Ordering::Release);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let route = fixed_failover_check_route(&READY, move || {
+            observed.fetch_add(1, Ordering::AcqRel);
+        });
+        let request = || warp::test::request().method("POST").path("/commands/auto-failover/check");
+
+        assert_eq!(request().reply(&route).await.status(), warp::http::StatusCode::FORBIDDEN);
+        assert_eq!(
+            request().header(FAILOVER_NOTIFY_HEADER, "wrong").reply(&route).await.status(),
+            warp::http::StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            request().header(FAILOVER_NOTIFY_HEADER, "1").reply(&route).await.status(),
+            warp::http::StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(calls.load(Ordering::Acquire), 0);
+
+        READY.store(true, Ordering::Release);
+        assert_eq!(
+            request().header(FAILOVER_NOTIFY_HEADER, "1").reply(&route).await.status(),
+            warp::http::StatusCode::ACCEPTED
+        );
+        assert_eq!(calls.load(Ordering::Acquire), 1);
     }
 
     #[cfg(feature = "verge-dev")]

@@ -21,6 +21,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useVerge } from '@/hooks/use-verge'
 import { useProxiesData } from '@/providers/app-data-context'
 import { updateProxyChainConfigInRuntime } from '@/services/cmds'
 import {
@@ -316,6 +317,8 @@ export function ProxyGroupsChain(props: ProxyGroupsChainProps) {
   } = props
   const { proxyView } = useProxiesData()
 
+  const { verge } = useVerge()
+
   // Chain-specific state
   const [proxyChain, setProxyChain] = useState<ProxyChainItem[]>(() => {
     try {
@@ -397,8 +400,10 @@ export function ProxyGroupsChain(props: ProxyGroupsChainProps) {
     onGroupSelect(groupName)
     handleGroupMenuClose()
 
-    if (mode === 'rule') {
-      updateProxyChainConfigInRuntime(null)
+    if (mode === 'rule' && !verge?.entry_pool?.enabled) {
+      void updateProxyChainConfigInRuntime(null).catch((error: unknown) =>
+        alert(String(error)),
+      )
       localStorage.removeItem('proxy-chain-group')
       localStorage.removeItem('proxy-chain-exit-node')
       localStorage.removeItem('proxy-chain-items')

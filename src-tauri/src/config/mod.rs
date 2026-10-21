@@ -2,6 +2,7 @@ mod clash;
 #[allow(clippy::module_inception)]
 mod config;
 mod encrypt;
+pub mod entry_pool;
 mod mixed_port;
 mod port;
 mod prfitem;

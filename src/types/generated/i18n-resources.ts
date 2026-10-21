@@ -140,6 +140,7 @@ export interface TranslationResources {
           title: string
         }
         tests: {
+          connectivityHint: string
           title: string
         }
         traffic: {
@@ -204,6 +205,7 @@ export interface TranslationResources {
             unlock: string
           }
           tabs: {
+            codex: string
             connections: string
             home: string
             logs: string
@@ -520,6 +522,20 @@ export interface TranslationResources {
           instruction: string
           minimumNodes: string
           minimumNodesHint: string
+          pool: {
+            applied: string
+            apply: string
+            direct: string
+            disable: string
+            entries: string
+            exit: string
+            hint: string
+            inactive: string
+            saved: string
+            serial: string
+            target: string
+            title: string
+          }
           warning: string
         }
         empty: {
@@ -674,6 +690,92 @@ export interface TranslationResources {
       }
     }
     settings: {
+      autoFailover: {
+        checkNow: string
+        concurrency: string
+        configure: string
+        currentNode: string
+        delayTimeout: string
+        delayUrls: string
+        delayUrlsHint: string
+        description: string
+        enabled: string
+        enableHint: string
+        history: {
+          automatic: string
+          description: string
+          empty: string
+          from: string
+          manual: string
+          reason: string
+          restore: string
+          storageError: string
+          time: string
+          title: string
+          to: string
+          unknown: string
+        }
+        lastCheck: string
+        measuring: string
+        messages: {
+          accessDenied: string
+          allNodesFailed: string
+          blockedPage: string
+          cleanupPending: string
+          cooldown: string
+          coreUnavailable: string
+          directMode: string
+          profileMismatch: string
+          rateLimited: string
+          subscriptionUpdating: string
+          verificationRequired: string
+        }
+        networkReachable: string
+        nextCheck: string
+        onePerLine: string
+        overview: {
+          concurrency: string
+          configure: string
+          current: string
+          disabledHint: string
+          editStrategy: string
+          historyCount: string
+          latency: string
+          loading: string
+          monitoring: string
+          node: string
+          nodeProbes: string
+          noNodeChecks: string
+          noWebsiteChecks: string
+          status: string
+          strategy: string
+          subscription: string
+          subtitle: string
+        }
+        pageFailed: string
+        phases: {
+          checking: string
+          disabled: string
+          healthy: string
+          paused: string
+          retryWait: string
+          switching: string
+          updatingSubscription: string
+          verificationRequired: string
+          waitingCore: string
+        }
+        probeHint: string
+        reachable: string
+        requestFailed: string
+        saving: string
+        subscriptionUpdated: string
+        subscriptionUrl: string
+        title: string
+        unreachable: string
+        verificationRequired: string
+        websites: string
+        websiteTimeout: string
+      }
       components: {
         verge: {
           advanced: {

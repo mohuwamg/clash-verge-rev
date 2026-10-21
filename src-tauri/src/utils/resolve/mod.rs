@@ -85,6 +85,7 @@ pub(crate) fn resolve_setup_async() {
         Handle::refresh_clash();
         refresh_tray_menu().await;
         resolve_done();
+        crate::core::auto_failover::start();
     });
 }
 
@@ -164,6 +165,24 @@ async fn init_silent_updater() {
     logging!(info, Type::Setup, "Initializing silent updater...");
 
     let app_handle = Handle::app_handle();
+    // Local feature builds have no update feed. Do not offer an already cached
+    // upstream release either: installing it would replace the custom feature.
+    if app_handle
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|updater| updater.get("endpoints"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(Vec::is_empty)
+    {
+        logging!(
+            info,
+            Type::Setup,
+            "Silent updater disabled: this build has no update feed"
+        );
+        return;
+    }
 
     // Install cached updates before starting background checks.
     if SilentUpdater::global().try_install_on_startup(app_handle).await {

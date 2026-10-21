@@ -768,7 +768,34 @@ pub async fn enhance(profiles: &IProfiles) -> Result<(Mapping, HashSet<String>, 
     let config = authoritative.enforce(config);
     let config = ensure_lan_bind_address(config);
 
-    let config = cleanup_proxy_groups(config);
+    let mut config = cleanup_proxy_groups(config);
+    let failover = Config::verge()
+        .await
+        .latest_arc()
+        .auto_failover
+        .clone()
+        .unwrap_or_default();
+    if failover.enabled
+        && profiles.current.as_deref() == failover.profile_uid.as_deref()
+        && profiles
+            .current
+            .as_ref()
+            .and_then(|uid| profiles.get_item(uid).ok())
+            .and_then(|item| item.url.as_deref())
+            == Some(failover.subscription_url.as_str())
+    {
+        crate::core::auto_failover::policy::enhance(&mut config, &failover)?;
+    }
+    let pool = Config::verge()
+        .await
+        .latest_arc()
+        .entry_pool
+        .clone()
+        .unwrap_or_default();
+    if pool.enabled && profiles.current.as_deref() == pool.profile_uid.as_deref() {
+        let managed = failover.enabled && profiles.current.as_deref() == failover.profile_uid.as_deref();
+        crate::config::entry_pool::enhance(&mut config, &pool, managed)?;
+    }
     let config = use_sort(config);
 
     let mut exists_keys_set = HashSet::new();

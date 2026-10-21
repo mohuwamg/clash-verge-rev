@@ -1,3 +1,4 @@
+import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined'
 import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined'
 import ForkRightOutlinedIcon from '@mui/icons-material/ForkRightOutlined'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
@@ -8,6 +9,7 @@ import SubjectOutlinedIcon from '@mui/icons-material/SubjectOutlined'
 import WifiOutlinedIcon from '@mui/icons-material/WifiOutlined'
 import { type ComponentType, type ReactNode } from 'react'
 
+import CodexSvg from '@/assets/image/itemicon/codex.svg?react'
 import ConnectionsSvg from '@/assets/image/itemicon/connections.svg?react'
 import HomeSvg from '@/assets/image/itemicon/home.svg?react'
 import LogsSvg from '@/assets/image/itemicon/logs.svg?react'
@@ -18,6 +20,7 @@ import SettingsSvg from '@/assets/image/itemicon/settings.svg?react'
 import UnlockSvg from '@/assets/image/itemicon/unlock.svg?react'
 
 import { navigationItems } from './_navigation-meta'
+import CodexPage from './codex'
 import ConnectionsPage from './connections'
 import HomePage from './home'
 import LogsPage from './logs'
@@ -35,6 +38,11 @@ type NavigationItem = {
 }
 
 export const navItems: NavigationItem[] = [
+  {
+    ...navigationItems.codex,
+    icon: [<CodeOutlinedIcon key="mui" />, <CodexSvg key="svg" />],
+    Component: CodexPage,
+  },
   {
     ...navigationItems.home,
     icon: [<HomeOutlinedIcon key="mui" />, <HomeSvg key="svg" />],

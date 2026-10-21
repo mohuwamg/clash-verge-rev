@@ -19,7 +19,6 @@ import {
   updateProxyChainConfigInRuntime,
 } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
-import { debugLog } from '@/utils/debug'
 
 const MODES = ['rule', 'global', 'direct'] as const
 type Mode = (typeof MODES)[number]
@@ -51,7 +50,7 @@ const ProxyPage = () => {
   const updateChainConfigData = useCallback((value: string | null) => {
     dispatchChainConfigData(value)
   }, [])
-  const { verge } = useVerge()
+  const { verge, mutateVerge } = useVerge()
 
   const normalizedMode = clashConfig?.mode?.toLowerCase()
   const curMode = isMode(normalizedMode) ? normalizedMode : undefined
@@ -74,19 +73,13 @@ const ProxyPage = () => {
   const onToggleChainMode = useLockFn(async () => {
     const newChainMode = !isChainMode
 
-    setIsChainMode(newChainMode)
-    // 保存链式代理按钮状态到 localStorage
-    localStorage.setItem('proxy-chain-mode-enabled', newChainMode.toString())
-
-    if (!newChainMode) {
-      // 退出链式代理模式时，清除链式代理配置
-      try {
-        debugLog('Exiting chain mode, clearing chain configuration')
-        await updateProxyChainConfigInRuntime(null)
-        debugLog('Chain configuration cleared successfully')
-      } catch (error) {
-        console.error('Failed to clear chain configuration:', error)
-      }
+    try {
+      if (!newChainMode) await updateProxyChainConfigInRuntime(null)
+      setIsChainMode(newChainMode)
+      localStorage.setItem('proxy-chain-mode-enabled', newChainMode.toString())
+      mutateVerge()
+    } catch (error) {
+      showNotice.error(error)
     }
   })
 

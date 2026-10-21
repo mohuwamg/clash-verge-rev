@@ -78,7 +78,21 @@
       "disconnectFailed": "Failed to disconnect from proxy chain",
       "duplicateNode": "Proxy node already exists in chain",
       "entryNode": "Entry",
-      "exitNode": "Exit"
+      "exitNode": "Exit",
+      "pool": {
+        "title": "Multiple entrances",
+        "serial": "Sequential chain",
+        "hint": "Entrances are checked with Google every 20 seconds and fail over in list order. With Codex recovery enabled, exits switch only between same-IP main and backup routes.",
+        "entries": "Entrance candidates",
+        "exit": "Exit node",
+        "target": "Target group",
+        "applied": "Entrance pool configuration applied",
+        "inactive": "This configuration is not applied to the current profile or runtime. Check the profile and apply again.",
+        "direct": "Switch to Rule or Global mode to enable.",
+        "apply": "Save and enable",
+        "disable": "Disable pool",
+        "saved": "Proxy chain settings updated"
+      }
     },
     "messages": {
       "directMode": "Direct Mode"

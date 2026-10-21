@@ -423,7 +423,11 @@ export const CurrentProxyCard = () => {
   const { isCoreDataPending } = useCoreDataStatus()
   const { verge } = useVerge()
   const { current: currentProfile } = useProfiles()
-  const autoDelayEnabled = verge?.enable_auto_delay_detection ?? false
+  const autoFailoverActive =
+    verge?.auto_failover?.enabled &&
+    verge.auto_failover.profile_uid === currentProfile?.uid
+  const autoDelayEnabled =
+    !autoFailoverActive && (verge?.enable_auto_delay_detection ?? false)
   const defaultLatencyTimeout = verge?.default_latency_timeout
   const autoDelayIntervalMs = useMemo(() => {
     const rawInterval = verge?.auto_delay_detection_interval_minutes

@@ -35,6 +35,9 @@ pub enum FrontendEvent<'a> {
     RunStateChanged {
         state: serde_json::Value,
     },
+    AutoFailoverChanged {
+        state: serde_json::Value,
+    },
     PendingFailuresChanged,
     #[cfg(target_os = "linux")]
     ThemeChanged {
@@ -290,6 +293,7 @@ impl NotificationSystem {
             FrontendEvent::ProfileUpdateStarted { uid } => ("profile-update-started", Ok(json!({ "uid": uid }))),
             FrontendEvent::ProfileUpdateCompleted { uid } => ("profile-update-completed", Ok(json!({ "uid": uid }))),
             FrontendEvent::RunStateChanged { state } => ("verge://run-state-changed", Ok(state)),
+            FrontendEvent::AutoFailoverChanged { state } => ("verge://auto-failover", Ok(state)),
             FrontendEvent::PendingFailuresChanged => ("verge://pending-failures-changed", Ok(serde_json::Value::Null)),
             #[cfg(target_os = "linux")]
             FrontendEvent::ThemeChanged { theme } => ("tauri://theme-changed", serde_json::to_value(theme)),
@@ -310,5 +314,27 @@ impl NotificationSystem {
         }) {
             logging!(warn, Type::Frontend, "Failed to dispatch event on main thread: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod auto_failover_event_tests {
+    use super::{FrontendEvent, NotificationSystem};
+    use crate::core::auto_failover::FailoverStatus;
+
+    #[test]
+    fn queued_status_keeps_the_frontend_event_name_and_snapshot() -> Result<(), serde_json::Error> {
+        let state = FailoverStatus {
+            phase: "checking".into(),
+            current_node: Some("node-a".into()),
+            generation: 7,
+            ..FailoverStatus::default()
+        };
+        let payload = serde_json::to_value(state)?;
+        let (name, value) =
+            NotificationSystem::serialize_event(FrontendEvent::AutoFailoverChanged { state: payload.clone() });
+        assert_eq!(name, "verge://auto-failover");
+        assert_eq!(value?, payload);
+        Ok(())
     }
 }

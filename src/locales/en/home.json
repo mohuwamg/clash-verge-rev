@@ -113,7 +113,8 @@
       }
     },
     "tests": {
-      "title": "Website Tests"
+      "title": "Website Tests",
+      "connectivityHint": "Connection latency only: HTTPS measures the TLS handshake, not page, HTTP status, or account availability."
     },
     "traffic": {
       "metrics": {

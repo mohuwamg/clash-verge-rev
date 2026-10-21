@@ -11,7 +11,7 @@ import {
   useRecordSelection,
 } from '@/hooks/use-record-selection'
 import { useVerge } from '@/hooks/use-verge'
-import { syncTrayProxySelection } from '@/services/cmds'
+import { selectAutoFailoverNode, syncTrayProxySelection } from '@/services/cmds'
 import { debugLog } from '@/utils/debug'
 
 // 缓存连接清理
@@ -74,17 +74,19 @@ export const useProxySelection = (options: ProxySelectionOptions = {}) => {
       }
 
       try {
+        let managedSelection = false
         if (isFixedProxy) {
           await unfixedProxy(groupName)
         } else {
-          await selectNodeForGroup(groupName, proxyName)
+          managedSelection = await selectAutoFailoverNode(groupName, proxyName)
+          if (!managedSelection) await selectNodeForGroup(groupName, proxyName)
         }
         onSuccess?.()
         syncTraySelection()
         if (isFixedProxy) {
           await forgetSelection(groupName)
           debugLog(`[ProxySelection] 代理和状态同步完成: ${groupName}`)
-        } else {
+        } else if (!managedSelection) {
           await recordSelection(groupName, proxyName)
           debugLog(
             `[ProxySelection] 代理和状态同步完成: ${groupName} -> ${proxyName}`,

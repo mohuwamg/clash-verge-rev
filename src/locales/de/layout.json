@@ -2,6 +2,7 @@
   "components": {
     "navigation": {
       "tabs": {
+        "codex": "Codex",
         "home": "Startseite",
         "proxies": "Proxy",
         "profiles": "Abonnement",

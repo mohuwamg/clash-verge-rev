@@ -16,6 +16,12 @@ pub async fn get_verge_config() -> CmdResult<SharedDraft<IVerge>> {
 /// 修改Verge配置
 #[tauri::command]
 pub async fn patch_verge_config(payload: IVerge) -> CmdResult {
+    if payload.auto_failover.is_some() {
+        return Err(super::coded_error(
+            "AUTO_FAILOVER_SETTINGS",
+            "Use set_auto_failover_config to change automatic failover settings",
+        ));
+    }
     let operation = system_proxy_operation(&payload);
     let result = match operation {
         Some(operation) => notification::asking_for(operation, Box::pin(feat::patch_verge(&payload, false))).await,

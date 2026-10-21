@@ -5,7 +5,14 @@ import {
 } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
 import { Add, NetworkCheck } from '@mui/icons-material'
-import { Box, IconButton, Tooltip, alpha, styled } from '@mui/material'
+import {
+  Box,
+  IconButton,
+  Tooltip,
+  Typography,
+  alpha,
+  styled,
+} from '@mui/material'
 import { emit } from '@tauri-apps/api/event'
 import { nanoid } from 'nanoid'
 import { useEffect, useRef, useMemo, useCallback } from 'react'
@@ -204,6 +211,13 @@ export const TestCard = () => {
         </Box>
       }
     >
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', px: 1, mb: 1 }}
+      >
+        {t('home.components.tests.connectivityHint')}
+      </Typography>
       <ScrollBox>
         <DragDropProvider sensors={[PointerSensor]} onDragEnd={onDragEnd}>
           {renderTestItems}

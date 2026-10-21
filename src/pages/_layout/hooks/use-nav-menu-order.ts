@@ -22,7 +22,7 @@ const createNavLookup = <T extends { path: string }>(items: readonly T[]) => {
   return { map, defaultOrder }
 }
 
-const resolveMenuOrder = <T extends { path: string }>(
+export const resolveMenuOrder = <T extends { path: string }>(
   order: string[] | null | undefined,
   defaultOrder: string[],
   map: Map<string, T>,
@@ -41,7 +41,14 @@ const resolveMenuOrder = <T extends { path: string }>(
 
   for (const path of defaultOrder) {
     if (!seen.has(path)) {
-      resolved.push(path)
+      // Insert the new Codex page before Home when upgrading a saved menu order.
+      // An explicitly saved Codex position remains under the user's control.
+      const homeIndex = resolved.indexOf('/')
+      if (path === '/codex' && homeIndex >= 0) {
+        resolved.splice(homeIndex, 0, path)
+      } else {
+        resolved.push(path)
+      }
       seen.add(path)
     }
   }

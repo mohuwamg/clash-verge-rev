@@ -113,7 +113,8 @@
       }
     },
     "tests": {
-      "title": "网站测试"
+      "title": "网站测试",
+      "connectivityHint": "仅测连接延迟：HTTPS 为 TLS 握手耗时，不验证网页、HTTP 状态或账号可用性。"
     },
     "traffic": {
       "metrics": {

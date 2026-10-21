@@ -78,7 +78,21 @@
       "disconnectFailed": "断开链式代理失败",
       "duplicateNode": "该节点已在链式代理表中",
       "entryNode": "入口",
-      "exitNode": "出口"
+      "exitNode": "出口",
+      "pool": {
+        "title": "多入口自动切换",
+        "serial": "节点依次串联",
+        "hint": "入口每 20 秒用 Google 检测，故障时按顺序切换。启用 Codex 自动恢复后，出口仅在同 IP 主备之间切换。",
+        "entries": "入口候选（可多选）",
+        "exit": "出口节点",
+        "target": "目标代理组",
+        "applied": "多入口配置已应用",
+        "inactive": "当前订阅或运行配置未应用此设置，请检查订阅后重新应用。",
+        "direct": "请切换到规则或全局模式后启用。",
+        "apply": "保存并启用",
+        "disable": "停用多入口",
+        "saved": "链式代理设置已更新"
+      }
     },
     "messages": {
       "directMode": "直连模式"

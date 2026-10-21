@@ -491,3 +491,27 @@ export const probeListener = async (request: ListenerProbe) => {
 export const saveProxyPorts = async (settings: ProxyPortSettings) => {
   return invoke<SaveProxyPortsOutcome>('save_proxy_ports', { settings })
 }
+
+export async function getAutoFailoverStatus() {
+  return invoke<import('@/types/auto-failover').AutoFailoverStatus>(
+    'get_auto_failover_status',
+  )
+}
+
+export async function setAutoFailoverConfig(
+  config: import('@/types/auto-failover').AutoFailoverConfig,
+) {
+  return invoke<void>('set_auto_failover_config', { config })
+}
+
+export async function checkAutoFailoverNow() {
+  return invoke<void>('check_auto_failover_now')
+}
+
+export async function selectAutoFailoverNode(group: string, node: string) {
+  return invoke<boolean>('select_auto_failover_node', { group, node })
+}
+
+export async function setEntryPoolConfig(config: import('@/types/entry-pool').EntryPoolConfig) {
+  return invoke<void>('set_entry_pool_config', { config })
+}

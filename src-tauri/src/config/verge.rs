@@ -13,6 +13,12 @@ use smartstring::alias::String;
 /// ### `verge.yaml` schema
 #[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct IVerge {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_pool: Option<crate::config::entry_pool::EntryPoolConfig>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_failover: Option<crate::core::auto_failover::policy::AutoFailoverConfig>,
+
     /// silent | error | warn | info | debug | trace
     pub app_log_level: Option<String>,
 
@@ -403,6 +409,8 @@ impl IVerge {
             };
         }
 
+        patch!(auto_failover);
+        patch!(entry_pool);
         patch!(app_log_level);
         patch!(app_log_max_size);
         patch!(app_log_max_count);

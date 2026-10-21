@@ -2,6 +2,7 @@
   "components": {
     "navigation": {
       "tabs": {
+        "codex": "Codex",
         "home": "首 頁",
         "proxies": "代 理",
         "profiles": "訂 閱",
