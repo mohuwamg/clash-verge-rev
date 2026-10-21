@@ -127,16 +127,24 @@ jobs:
           git ls-remote --tags origin | awk '{print $2}' | sed 's#refs/tags/##; s#\^{}$##' \
             | sort -u > /tmp/origin_tags
           git tag -l | sort -u > /tmp/upstream_tags
-          new_tags=$(comm -13 /tmp/origin_tags /tmp/upstream_tags | grep -E "${RELEASE_TAG_REGEX}" || true)
+          missing=$(comm -13 /tmp/origin_tags /tmp/upstream_tags | grep -E "${RELEASE_TAG_REGEX}" || true)
 
-          if [ -z "${new_tags}" ]; then
+          if [ -z "${missing}" ]; then
             echo "没有新的发布 tag"
             echo "pushed=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # 首次运行时 origin 一个发布 tag 都没有，上游历史 tag 会被全量回放成几十次构建。
+          # 因此首次只推最新一个 tag 作为基线，之后的差集才是真正的新版本。
+          if ! grep -Eq "${RELEASE_TAG_REGEX}" /tmp/origin_tags; then
+            baseline=$(git tag -l --sort=-creatordate | grep -E -m1 "${RELEASE_TAG_REGEX}" || true)
+            echo "::notice::origin 尚无发布 tag，首次只推基线 tag ${baseline}，其余历史 tag 不回放"
+            missing="${baseline}"
+          fi
+
           pushed=""
-          for t in ${new_tags}; do
+          for t in ${missing}; do
             # Release Build 只接受落在 main 历史上的 tag，先筛掉不在同步分支上的 tag
             if ! git merge-base --is-ancestor "refs/tags/${t}" upstream/main 2>/dev/null; then
               echo "::warning::${t} 不在上游 main 历史上，跳过（Release Build 的前置校验会失败）"
