@@ -1,0 +1,194 @@
+name: Sync Upstream
+
+# 每天北京时间 00:00 把 clash-verge-rev/clash-verge-rev 的 dev/main 合进本仓库，
+# 并把上游新发布的 v*.*.* tag 推到本仓库；tag 推送会自动触发 Release Build 出各系统安装包。
+#
+# 前置条件（缺一不可）：
+#   1. Settings -> Actions -> General 里允许 Actions 运行（fork 默认关闭，关闭时定时任务不跑）。
+#   2. Secrets 里配置 SYNC_PAT：Fine-grained PAT，只授权本仓库，
+#      Contents = Read and write、Workflows = Read and write。
+#      不能用 GITHUB_TOKEN —— 它推的 tag 不会触发 Release Build（GitHub 防工作流连锁）。
+#   3. Release Build 本身还需要 TAURI_PRIVATE_KEY / TAURI_KEY_PASSWORD，
+#      因为 tauri.conf.json 里 createUpdaterArtifacts = true，缺签名密钥会构建失败。
+
+on:
+  schedule:
+    # UTC 16:00 = 北京时间次日 00:00
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 只检查差异，不推送分支和 tag
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: clash-verge-rev/clash-verge-rev
+  SYNC_BRANCHES: dev main
+  RELEASE_TAG_REGEX: ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$
+
+jobs:
+  sync:
+    name: Merge upstream and publish tags
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check required secret SYNC_PAT
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [ -z "${SYNC_PAT}" ]; then
+            echo "::error::缺少 secret SYNC_PAT（Fine-grained PAT，需要 Contents + Workflows 写权限）。"
+            exit 1
+          fi
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream branches and tags
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream '+refs/heads/*:refs/remotes/upstream/*'
+          git fetch --tags --force upstream
+          echo "upstream tags: $(git tag -l | wc -l)"
+
+      - name: Use PAT for pushing to origin
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          git remote set-url origin "https://x-access-token:${SYNC_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+
+      - name: Sync branches
+        id: sync
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          merged=""
+          conflicted=""
+          for b in ${SYNC_BRANCHES}; do
+            up="upstream/${b}"
+            if ! git rev-parse --verify -q "$up" >/dev/null; then
+              echo "::warning::上游没有 ${b} 分支，跳过"
+              continue
+            fi
+
+            if git rev-parse --verify -q "origin/${b}" >/dev/null; then
+              git checkout -q -B "$b" "origin/${b}"
+              if git merge-base --is-ancestor "$up" HEAD; then
+                echo "${b}: 已是最新"
+                continue
+              fi
+              if ! git merge --no-edit --no-ff "$up" \
+                  -m "chore(sync): merge upstream/${b} into ${b}"; then
+                git merge --abort
+                echo "::error::${b} 合并上游有冲突，已跳过并留待人工处理"
+                conflicted="${conflicted} ${b}"
+                continue
+              fi
+            else
+              echo "${b}: 本仓库不存在，按上游创建"
+              git checkout -q -B "$b" "$up"
+            fi
+
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "${b}: dry-run，跳过推送"
+              continue
+            fi
+            git push --no-tags origin "refs/heads/${b}"
+            merged="${merged} ${b}"
+            echo "${b}: 已推送"
+          done
+
+          echo "merged=${merged# }" >> "$GITHUB_OUTPUT"
+          echo "conflicted=${conflicted# }" >> "$GITHUB_OUTPUT"
+
+      - name: Publish upstream release tags
+        id: tags
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          git ls-remote --tags origin | awk '{print $2}' | sed 's#refs/tags/##; s#\^{}$##' \
+            | sort -u > /tmp/origin_tags
+          git tag -l | sort -u > /tmp/upstream_tags
+          new_tags=$(comm -13 /tmp/origin_tags /tmp/upstream_tags | grep -E "${RELEASE_TAG_REGEX}" || true)
+
+          if [ -z "${new_tags}" ]; then
+            echo "没有新的发布 tag"
+            echo "pushed=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pushed=""
+          for t in ${new_tags}; do
+            # Release Build 只接受落在 main 历史上的 tag，先筛掉不在同步分支上的 tag
+            if ! git merge-base --is-ancestor "refs/tags/${t}" upstream/main 2>/dev/null; then
+              echo "::warning::${t} 不在上游 main 历史上，跳过（Release Build 的前置校验会失败）"
+              continue
+            fi
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "dry-run: 将推送 tag ${t}"
+              continue
+            fi
+            git push origin "refs/tags/${t}:refs/tags/${t}"
+            pushed="${pushed} ${t}"
+            echo "已推送 tag ${t} -> 会触发 Release Build 打包各系统安装包"
+          done
+          echo "pushed=${pushed# }" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        env:
+          MERGED: ${{ steps.sync.outputs.merged }}
+          CONFLICTED: ${{ steps.sync.outputs.conflicted }}
+          PUSHED_TAGS: ${{ steps.tags.outputs.pushed }}
+        run: |
+          {
+            echo "## 上游同步结果（$(date -u '+%Y-%m-%d %H:%M UTC')）"
+            echo ""
+            echo "- 同步分支: ${MERGED:-无更新}"
+            echo "- 冲突分支: ${CONFLICTED:-无}"
+            echo "- 推送 tag: ${PUSHED_TAGS:-无}"
+            if [ -n "${PUSHED_TAGS}" ]; then
+              echo ""
+              echo "tag 推送已触发 Release Build，安装包会出现在对应 tag 的 Release 页面。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open issue when merge conflicts
+        if: steps.sync.outputs.conflicted != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFLICTED: ${{ steps.sync.outputs.conflicted }}
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search 'in:title 上游同步冲突' --json number --jq '.[0].number' || true)
+          body="上游 \`${UPSTREAM_REPO}\` 的分支 \`${CONFLICTED}\` 与本仓库产生合并冲突，自动同步已跳过这些分支。
+
+          手动处理：
+          \`\`\`
+          git fetch https://github.com/${UPSTREAM_REPO}.git '+refs/heads/*:refs/remotes/upstream/*'
+          git checkout ${CONFLICTED%% *}
+          git merge --no-ff upstream/${CONFLICTED%% *}   # 解决冲突后提交并推送
+          \`\`\`"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "上游同步冲突: ${CONFLICTED}" --body "$body"
+          fi
