@@ -9,6 +9,17 @@
 A Clash Meta GUI based on <a href="https://github.com/tauri-apps/tauri">Tauri</a>.
 </h3>
 
+> **声明 / Disclaimer**
+>
+> 本仓库是上游项目 [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev) 的同步镜像：默认分支 `dev`（以及 `main`）每天 00:00（北京时间）自动合并上游代码，本仓库 Releases 里的安装包由 GitHub Actions 在上游发布新 tag 后自动构建，属个人备份性质，不是官方发布渠道。
+>
+> 本仓库不含上游之外的功能改动；唯一的一份定制（自动切换通道 / 多入口回退 / Codex 自动恢复）单独放在分支 [`feat/auto-failover`](https://github.com/mohuwamg/clash-verge-rev/tree/feat/auto-failover)，其 README 中有该功能的完整说明。
+>
+> This repository mirrors and daily syncs code from [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev); its installers are auto-built from upstream release tags and are not an official release channel.
+>
+> **项目名、图标、界面、内核与全部主体代码的版权均归原作者所有，许可证沿用上游 [GPL-3.0](./LICENSE)。如上游作者或权利人认为本仓库侵犯了您的权益，请在本仓库 [Issues](https://github.com/mohuwamg/clash-verge-rev/issues) 留言告知，我们会第一时间删除并下架本仓库。**
+> **If you are the upstream author or rights holder and consider this repository infringing, please open an issue and we will take it down immediately.**
+
 <p align="center">
   Languages:
   <a href="./docs/README_en.md">English</a> ·
